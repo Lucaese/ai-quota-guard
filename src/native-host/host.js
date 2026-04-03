@@ -49,13 +49,12 @@ process.stdin.on('data', (chunk) => {
 
 process.stdin.on('end', () => {
   log('stdin closed, bytesRead=' + bytesRead + ' chunks=' + chunks.length);
-  if (bytesRead > 0) processBuffer();
-  process.exit(0);
+  // 不在这里 exit——等 sendResponse 写完 stdout 后再退出
+  if (chunks.length > 0) processBuffer();
 });
 
 process.stdin.on('error', (err) => {
   log('stdin error: ' + err.message);
-  process.exit(1);
 });
 
 function processBuffer() {
@@ -126,7 +125,11 @@ function sendResponse(obj) {
   const buf  = Buffer.alloc(4 + len);
   buf.writeUInt32LE(len, 0);
   buf.write(json, 4, 'utf-8');
-  process.stdout.write(buf);
+  // 等 stdout flush 后再退出，防止 Chrome 还没读到响应就进程已退出
+  process.stdout.write(buf, () => {
+    log('response sent, exiting');
+    process.exit(0);
+  });
 }
 
 process.on('SIGTERM', () => process.exit(0));
