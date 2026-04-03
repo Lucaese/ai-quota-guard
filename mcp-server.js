@@ -147,9 +147,9 @@ const TOOLS = [
 
 // ─── Tool handlers ───────────────────────────────────────────────────────────
 
-const ConfigManager = require('./config');
-const { createProvider } = require('./providers');
-const { QuotaMonitor, STATE } = require('./monitor');
+const ConfigManager = require('./src/config');
+const { createProvider } = require('./src/providers');
+const { QuotaMonitor, STATE } = require('./src/monitor');
 
 // Singleton monitor (started lazily)
 let _monitor = null;

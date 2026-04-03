@@ -1,21 +1,20 @@
-<<<<<<< HEAD
-# AI Quota Guard 🛡️
+# AI Quota Guard
 
 Monitor AI model API quota usage and automatically pause/resume your agent's API calls based on configurable thresholds.
 
-[![npm version](https://badge.fury.io/js/ai-quota-guard.svg)](https://www.npmjs.com/package/ai-quota-guard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
 ## Features
 
-- 📊 **Real-time quota monitoring** – polls API usage from response headers
-- ⏸ **Auto-pause** – stops agent calls when usage hits your stop threshold
-- ▶ **Auto-resume** – re-activates calls when quota resets below resume threshold
-- 🔌 **Multi-provider** – supports Anthropic (Claude), OpenAI (GPT), and Google (Gemini)
-- ⚙️ **Per-model thresholds** – configure stop/resume % independently per model
-- 🖥️ **CLI + SDK** – use as a command-line tool or import as a library
+- **Real-time quota monitoring** — polls API usage from response headers
+- **Auto-pause** — stops agent calls when usage hits your stop threshold
+- **Auto-resume** — re-activates calls when quota resets below resume threshold
+- **Multi-provider** — supports Anthropic (Claude), OpenAI (GPT), and Google (Gemini)
+- **Per-model thresholds** — configure stop/resume % independently per model
+- **CLI + SDK** — use as a command-line tool or import as a library
+- **MCP Server** — native Claude Code integration via Model Context Protocol
 
 ---
 
@@ -32,13 +31,13 @@ Monitor AI model API quota usage and automatically pause/resume your agent's API
 ## Installation
 
 ```bash
-npm install -g ai-quota-guard
+npm install -g github:Lucaese/ai-quota-guard
 ```
 
 Or install locally in your project:
 
 ```bash
-npm install ai-quota-guard
+npm install github:Lucaese/ai-quota-guard
 ```
 
 ---
@@ -131,8 +130,8 @@ quota-guard watch --interval 30
 ```
 
 The watcher runs indefinitely. When thresholds are crossed:
-- 🔴 **PAUSED** – printed with timestamp when stop threshold is hit
-- 🟢 **RESUMED** – printed with timestamp when quota recovers
+- **PAUSED** — printed with timestamp when stop threshold is hit
+- **RESUMED** — printed with timestamp when quota recovers
 
 Press `Ctrl+C` to stop.
 
@@ -227,10 +226,6 @@ guard.on('resumed', ({ id, usedPercent }) => {
   console.log(`▶ ${id} resumed — ${usedPercent}% used`);
 });
 
-guard.on('quota', ({ id, quota }) => {
-  // Called every poll cycle with fresh data
-});
-
 guard.on('error', ({ id, error }) => {
   console.error(`Error probing ${id}: ${error}`);
 });
@@ -241,12 +236,9 @@ guard.start();
 async function callModel(prompt) {
   if (!guard.isAllowed('anthropic', 'claude-opus-4-5')) {
     console.log('Model paused – waiting for quota to restore…');
-    return null; // or queue, retry, etc.
+    return null;
   }
-  
   // Your normal API call here
-  const response = await anthropic.messages.create({ ... });
-  return response;
 }
 ```
 
@@ -272,6 +264,24 @@ async function callModel(prompt) {
 | `getSnapshot()` | `Array` | Current state of all models |
 | `getHistory(id)` | `Array` | Last 100 quota snapshots for a model |
 | `forceProbe(provider, model)` | `Promise<quota>` | Force immediate re-probe |
+
+---
+
+## MCP Server (Claude Code Integration)
+
+Use as an MCP server so Claude Code can check quota before each call:
+
+```json
+{
+  "mcpServers": {
+    "quota-guard": {
+      "command": "quota-guard-mcp"
+    }
+  }
+}
+```
+
+Available MCP tools: `quota_status`, `quota_is_allowed`, `quota_add_model`, `quota_list_models`, `quota_remove_model`, `quota_force_probe`.
 
 ---
 
@@ -309,27 +319,6 @@ Settings are stored in:
 
 ---
 
-## Publishing to npm
-
-```bash
-# Update version
-npm version patch|minor|major
-
-# Publish
-npm publish --access public
-```
-
----
-
-## Contributing
-
-Pull requests welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
-
 ## License
 
 MIT
-=======
-# ai-quota-guard
->>>>>>> a01a98fa6057992a346f23ca94581d95efc8f568
