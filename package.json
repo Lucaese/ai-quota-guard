@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "bin": {
     "quota-guard": "./bin/cli.js",
-    "aqg": "./bin/cli.js"
+    "aqg": "./bin/cli.js",
+    "quota-guard-mcp": "./mcp-server.js"
   },
   "scripts": {
     "start": "node bin/cli.js",
@@ -42,6 +43,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/ai-quota-guard.git"
+    "url": "https://github.com/Lucaese/ai-quota-guard.git"
   }
 }
