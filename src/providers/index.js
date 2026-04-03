@@ -1,15 +1,17 @@
 'use strict';
 
-const AnthropicProvider = require('./anthropic');
-const OpenAIProvider    = require('./openai');
-const GeminiProvider    = require('./gemini');
-const ClaudeAIProvider  = require('./claudeai');
+const AnthropicProvider          = require('./anthropic');
+const OpenAIProvider             = require('./openai');
+const GeminiProvider             = require('./gemini');
+const ClaudeAIProvider           = require('./claudeai');
+const ClaudeAIPlaywrightProvider = require('./claudeai-pw');
 
 const REGISTRY = {
-  anthropic: AnthropicProvider,
-  openai:    OpenAIProvider,
-  gemini:    GeminiProvider,
-  claudeai:  ClaudeAIProvider,  // claude.ai 订阅套餐（用 sessionKey 认证）
+  anthropic:  AnthropicProvider,
+  openai:     OpenAIProvider,
+  gemini:     GeminiProvider,
+  claudeai:   ClaudeAIProvider,           // 方案A：Chrome扩展写文件，此处读取
+  'claudeai-pw': ClaudeAIPlaywrightProvider, // 方案B：Playwright 直接抓取
 };
 
 /**

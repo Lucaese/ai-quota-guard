@@ -26,17 +26,20 @@
   "license": "MIT",
   "dependencies": {
     "axios": "^1.6.0",
+    "boxen": "^5.1.2",
     "chalk": "^4.1.2",
+    "cli-progress": "^3.12.0",
     "commander": "^11.1.0",
     "conf": "^10.2.0",
-    "ora": "^5.4.1",
-    "table": "^6.8.1",
+    "dayjs": "^1.11.10",
     "dotenv": "^16.3.1",
-    "node-cron": "^3.0.3",
     "inquirer": "^8.2.6",
-    "cli-progress": "^3.12.0",
-    "boxen": "^5.1.2",
-    "dayjs": "^1.11.10"
+    "node-cron": "^3.0.3",
+    "ora": "^5.4.1",
+    "table": "^6.8.1"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.59.1"
   },
   "engines": {
     "node": ">=16.0.0"

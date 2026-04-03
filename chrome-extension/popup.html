@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Quota Guard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 280px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #63b3ed;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .card {
+      background: #1a1d27;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 1px solid #2d3748;
+    }
+    .label {
+      font-size: 11px;
+      color: #718096;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .pct {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .pct.ok   { color: #68d391; }
+    .pct.warn { color: #f6e05e; }
+    .pct.crit { color: #fc8181; }
+    .bar-bg {
+      height: 6px;
+      background: #2d3748;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+    .bar-fill.ok   { background: #68d391; }
+    .bar-fill.warn { background: #f6e05e; }
+    .bar-fill.crit { background: #fc8181; }
+    .reset {
+      font-size: 11px;
+      color: #4a5568;
+    }
+    .footer {
+      font-size: 10px;
+      color: #2d3748;
+      text-align: center;
+      margin-top: 8px;
+    }
+    .error {
+      color: #fc8181;
+      font-size: 12px;
+      padding: 8px;
+      background: #1a1d27;
+      border-radius: 6px;
+      border: 1px solid #fc818133;
+    }
+    .spinner {
+      text-align: center;
+      color: #4a5568;
+      font-size: 12px;
+      padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>⚡ AI Quota Guard</h1>
+  <div id="content"><div class="spinner">加载中…</div></div>
+  <div class="footer" id="footer"></div>
+
+  <script>
+    function level(pct) {
+      if (pct >= 90) return 'crit';
+      if (pct >= 70) return 'warn';
+      return 'ok';
+    }
+
+    function renderBar(pct) {
+      const l = level(pct);
+      return `
+        <div class="pct ${l}">${pct.toFixed(1)}%</div>
+        <div class="bar-bg"><div class="bar-fill ${l}" style="width:${Math.min(pct,100)}%"></div></div>
+      `;
+    }
+
+    chrome.storage.local.get('claudeaiUsage', ({ claudeaiUsage: u }) => {
+      const el = document.getElementById('content');
+      const footer = document.getElementById('footer');
+
+      if (!u) {
+        el.innerHTML = '<div class="error">暂无数据 — 等待首次同步…</div>';
+        return;
+      }
+      if (u.error) {
+        el.innerHTML = `<div class="error">错误: ${u.error}</div>`;
+        footer.textContent = u.fetchedAt ? '更新于 ' + new Date(u.fetchedAt).toLocaleTimeString() : '';
+        return;
+      }
+
+      const session = u.sessionUsedPercent;
+      const weekly  = u.weeklyUsedPercent;
+
+      let html = '';
+
+      if (session != null) {
+        html += `
+          <div class="card">
+            <div class="label">当前 Session</div>
+            ${renderBar(session)}
+            <div class="reset">${u.sessionResetAt ? '重置：' + u.sessionResetAt : ''}</div>
+          </div>`;
+      }
+
+      if (weekly != null) {
+        html += `
+          <div class="card">
+            <div class="label">本周额度</div>
+            ${renderBar(weekly)}
+            <div class="reset">${u.weeklyResetAt ? '重置：' + u.weeklyResetAt : ''}</div>
+          </div>`;
+      }
+
+      if (!html) {
+        html = '<div class="error">无法解析用量数据</div>';
+      }
+
+      el.innerHTML = html;
+      footer.textContent = '来源：' + (u.source || '—') + ' · ' + new Date(u.fetchedAt).toLocaleTimeString();
+    });
+  </script>
+</body>
+</html>
