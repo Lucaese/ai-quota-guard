@@ -1,157 +1,83 @@
 /**
  * AI Quota Guard Bridge — Background Service Worker
  *
- * 每分钟从 claude.ai 拉取用量数据，通过 Native Messaging 同步给 quota-guard。
+ * 接收来自 Content Script 的用量数据，通过 Native Messaging 同步给 quota-guard。
  * 同时存入 chrome.storage.local 供 popup 显示。
+ * 每5分钟自动打开 claude.ai/settings/usage 刷新数据（后台静默）。
  */
 
-const NATIVE_HOST = 'com.ai_quota_guard.bridge';
-const POLL_MINUTES = 1;
+'use strict';
 
-// ── 启动时立即拉一次，然后定时轮询 ──────────────────────────────────────────
+const NATIVE_HOST  = 'com.ai_quota_guard.bridge';
+const POLL_MINUTES = 5;
+const USAGE_URL    = 'https://claude.ai/settings/usage';
+
+// ── 监听来自 Content Script 的消息 ───────────────────────────────────────────
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'USAGE_DATA' && msg.payload) {
+    handleUsageData(msg.payload);
+    sendResponse({ ok: true });
+  }
+});
+
+// ── 安装时启动定时任务 ────────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create('fetchUsage', { periodInMinutes: POLL_MINUTES });
-  fetchAndSync();
+  chrome.alarms.create('refreshUsage', { periodInMinutes: POLL_MINUTES });
+  // 立即打开 usage 页触发 content script
+  openUsagePage();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  fetchAndSync();
+  openUsagePage();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'fetchUsage') fetchAndSync();
+  if (alarm.name === 'refreshUsage') openUsagePage();
 });
 
-// ── 主流程 ───────────────────────────────────────────────────────────────────
-async function fetchAndSync() {
-  try {
-    const usage = await fetchUsage();
-    if (!usage) return;
+// ── 打开 claude.ai/settings/usage（静默，不影响用户） ─────────────────────────
+async function openUsagePage() {
+  // 如果已有该页面，刷新它；否则在后台新建 tab
+  const tabs = await chrome.tabs.query({ url: 'https://claude.ai/settings/usage*' });
+  if (tabs.length > 0) {
+    chrome.tabs.reload(tabs[0].id);
+  } else {
+    // 在后台创建 tab（不激活，不影响用户当前操作）
+    chrome.tabs.create({ url: USAGE_URL, active: false }, (tab) => {
+      // 数据提取后自动关闭
+      const closeTimer = setTimeout(() => {
+        chrome.tabs.remove(tab.id).catch(() => {});
+      }, 15000); // 15秒后关闭
 
-    const payload = {
-      ...usage,
-      fetchedAt: new Date().toISOString(),
-    };
-
-    // 存入 chrome.storage 供 popup 读取
-    await chrome.storage.local.set({ claudeaiUsage: payload });
-
-    // 发送给 Native Messaging Host → 写入文件 → quota-guard 读取
-    sendToNativeHost(payload);
-  } catch (err) {
-    console.error('[quota-guard] fetchAndSync error:', err);
-    await chrome.storage.local.set({
-      claudeaiUsage: { error: err.message, fetchedAt: new Date().toISOString() },
+      // 监听 content script 完成提取后关闭
+      const listener = (msg, sender) => {
+        if (msg.type === 'USAGE_DATA' && sender.tab?.id === tab.id) {
+          clearTimeout(closeTimer);
+          chrome.tabs.remove(tab.id).catch(() => {});
+          chrome.runtime.onMessage.removeListener(listener);
+        }
+      };
+      chrome.runtime.onMessage.addListener(listener);
     });
   }
 }
 
-// ── 获取用量数据 ──────────────────────────────────────────────────────────────
-async function fetchUsage() {
-  // 1. 获取组织信息
-  const orgsRes = await fetch('https://claude.ai/api/organizations', {
-    credentials: 'include',
-  });
-  if (!orgsRes.ok) throw new Error(`organizations API failed: ${orgsRes.status}`);
-  const orgs = await orgsRes.json();
-  const orgId = orgs[0]?.uuid;
-  if (!orgId) throw new Error('No organization found');
-
-  // 2. 尝试多个可能的用量端点
-  const candidates = [
-    `/api/organizations/${orgId}/usage`,
-    `/api/organizations/${orgId}/limits`,
-    `/api/organizations/${orgId}/rate_limits`,
-    `/api/account_usage`,
-    `/api/usage_limits`,
-    `/api/usage`,
-  ];
-
-  for (const path of candidates) {
-    try {
-      const res = await fetch(`https://claude.ai${path}`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        const normalized = normalizeApiData(data, path);
-        if (normalized) return normalized;
-      }
-    } catch (_) {}
-  }
-
-  // 3. 最终回退：解析 settings/usage 页面 HTML
-  return await fetchFromPage();
-}
-
-// ── 解析 JSON API 响应 ────────────────────────────────────────────────────────
-function normalizeApiData(data, path) {
-  // 尝试常见字段名
-  const session =
-    data.session?.used_percentage ??
-    data.current_session?.percent_used ??
-    data.sessionUsedPercent ??
-    data.plan_usage?.session_percent ??
-    null;
-
-  const weekly =
-    data.weekly?.used_percentage ??
-    data.weekly_limits?.percent_used ??
-    data.weeklyUsedPercent ??
-    data.plan_usage?.weekly_percent ??
-    null;
-
-  if (session === null && weekly === null) return null;
-
-  return {
-    source: 'api:' + path,
-    sessionUsedPercent: session,
-    weeklyUsedPercent: weekly,
-    sessionResetAt: data.session?.reset_at ?? data.current_session?.reset_at ?? null,
-    weeklyResetAt: data.weekly?.reset_at ?? data.weekly_limits?.reset_at ?? null,
-    raw: data,
+// ── 处理用量数据 ──────────────────────────────────────────────────────────────
+async function handleUsageData(data) {
+  const payload = {
+    sessionUsedPercent: data.sessionUsedPercent ?? null,
+    weeklyUsedPercent:  data.weeklyUsedPercent  ?? null,
+    sessionResetAt:     data.sessionResetAt     ?? null,
+    weeklyResetAt:      data.weeklyResetAt      ?? null,
+    source:             data.source             ?? 'extension',
+    fetchedAt:          new Date().toISOString(),
   };
-}
 
-// ── 解析页面 HTML ─────────────────────────────────────────────────────────────
-async function fetchFromPage() {
-  const res = await fetch('https://claude.ai/settings/usage', { credentials: 'include' });
-  if (!res.ok) throw new Error(`settings/usage page failed: ${res.status}`);
+  // 存入 chrome.storage 供 popup 显示
+  await chrome.storage.local.set({ claudeaiUsage: payload });
 
-  const html = await res.text();
-
-  // 从 __NEXT_DATA__ 提取
-  const nextMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
-  if (nextMatch) {
-    try {
-      const nextData = JSON.parse(nextMatch[1]);
-      const props = nextData?.props?.pageProps ?? {};
-      const limits = props.usageLimits ?? props.usageData ?? props.limits ?? null;
-      if (limits) {
-        return {
-          source: 'next-data',
-          sessionUsedPercent: limits.sessionUsedPercent ?? limits.session?.usedPercent ?? null,
-          weeklyUsedPercent: limits.weeklyUsedPercent ?? limits.weekly?.usedPercent ?? null,
-          sessionResetAt: limits.session?.resetAt ?? null,
-          weeklyResetAt: limits.weekly?.resetAt ?? null,
-          raw: limits,
-        };
-      }
-    } catch (_) {}
-  }
-
-  // 正则提取百分比数字
-  const pcts = [...html.matchAll(/(\d+(?:\.\d+)?)\s*%\s*used/gi)].map(m => parseFloat(m[1]));
-  const sessionReset = html.match(/Resets\s+in\s+([\d\w\s]+?)(?:<|,)/i)?.[1]?.trim();
-  const weeklyReset  = html.match(/Resets\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[^<,]{1,30})/i)?.[1]?.trim();
-
-  if (pcts.length === 0) throw new Error('Could not parse any usage percentages from page');
-
-  return {
-    source: 'html-regex',
-    sessionUsedPercent: pcts[0] ?? null,
-    weeklyUsedPercent: pcts[1] ?? null,
-    sessionResetAt: sessionReset ? `in ${sessionReset}` : null,
-    weeklyResetAt: weeklyReset ?? null,
-  };
+  // 发送给 Native Messaging Host → 写入文件
+  sendToNativeHost(payload);
 }
 
 // ── Native Messaging ──────────────────────────────────────────────────────────
@@ -159,11 +85,12 @@ function sendToNativeHost(payload) {
   try {
     chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
       if (chrome.runtime.lastError) {
-        // Native host 未安装时静默失败（不影响 popup 展示）
-        console.warn('[quota-guard] native host not available:', chrome.runtime.lastError.message);
+        console.warn('[quota-guard] native host:', chrome.runtime.lastError.message);
+      } else {
+        console.log('[quota-guard] synced to file:', response);
       }
     });
   } catch (err) {
-    console.warn('[quota-guard] sendNativeMessage error:', err);
+    console.warn('[quota-guard] sendNativeMessage failed:', err);
   }
 }
