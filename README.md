@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI Quota Guard 🛡️
 
 Monitor AI model API quota usage and automatically pause/resume your agent's API calls based on configurable thresholds.
@@ -329,3 +330,6 @@ Pull requests welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT
+=======
+# ai-quota-guard
+>>>>>>> a01a98fa6057992a346f23ca94581d95efc8f568
