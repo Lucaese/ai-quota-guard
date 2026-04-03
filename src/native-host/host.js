@@ -26,6 +26,14 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ── 日志（调试用） ────────────────────────────────────────────────────────────
+const LOG_FILE = path.join(DATA_DIR, 'native-host.log');
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  fs.appendFileSync(LOG_FILE, line);
+}
+log('native host started, pid=' + process.pid);
+
 // ── Native Messaging 读取 ─────────────────────────────────────────────────────
 let pendingLength = null;
 const chunks = [];
@@ -67,8 +75,10 @@ function processBuffer() {
   // 处理消息
   try {
     const message = JSON.parse(messageStr);
+    log('received message: ' + messageStr.slice(0, 200));
     handleMessage(message);
   } catch (err) {
+    log('parse error: ' + err.message);
     sendResponse({ ok: false, error: 'JSON parse error: ' + err.message });
   }
 
@@ -90,6 +100,7 @@ function handleMessage(msg) {
     };
 
     fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+    log('wrote data file: session=' + payload.sessionUsedPercent + '% weekly=' + payload.weeklyUsedPercent + '%');
     sendResponse({ ok: true, file: DATA_FILE });
   } catch (err) {
     sendResponse({ ok: false, error: err.message });

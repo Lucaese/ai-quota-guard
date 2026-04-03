@@ -85,12 +85,23 @@ function sendToNativeHost(payload) {
   try {
     chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
       if (chrome.runtime.lastError) {
-        console.warn('[quota-guard] native host:', chrome.runtime.lastError.message);
+        const errMsg = chrome.runtime.lastError.message;
+        console.warn('[quota-guard] native host:', errMsg);
+        // 将错误保存到 storage 以便外部诊断
+        chrome.storage.local.set({
+          nativeHostError: { error: errMsg, at: new Date().toISOString() }
+        });
       } else {
         console.log('[quota-guard] synced to file:', response);
+        chrome.storage.local.set({
+          nativeHostOk: { response, at: new Date().toISOString() }
+        });
       }
     });
   } catch (err) {
     console.warn('[quota-guard] sendNativeMessage failed:', err);
+    chrome.storage.local.set({
+      nativeHostError: { error: String(err), at: new Date().toISOString() }
+    });
   }
 }
