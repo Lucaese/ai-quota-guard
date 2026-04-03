@@ -33,6 +33,8 @@ function log(msg) {
   fs.appendFileSync(LOG_FILE, line);
 }
 log('native host started, pid=' + process.pid);
+// Explicitly enable flowing mode
+process.stdin.resume();
 
 // ── Native Messaging 读取 ─────────────────────────────────────────────────────
 let pendingLength = null;
@@ -42,8 +44,18 @@ let bytesRead = 0;
 process.stdin.on('data', (chunk) => {
   chunks.push(chunk);
   bytesRead += chunk.length;
-
   processBuffer();
+});
+
+process.stdin.on('end', () => {
+  log('stdin closed, bytesRead=' + bytesRead + ' chunks=' + chunks.length);
+  if (bytesRead > 0) processBuffer();
+  process.exit(0);
+});
+
+process.stdin.on('error', (err) => {
+  log('stdin error: ' + err.message);
+  process.exit(1);
 });
 
 function processBuffer() {
