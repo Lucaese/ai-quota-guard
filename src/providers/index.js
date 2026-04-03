@@ -3,11 +3,13 @@
 const AnthropicProvider = require('./anthropic');
 const OpenAIProvider    = require('./openai');
 const GeminiProvider    = require('./gemini');
+const ClaudeAIProvider  = require('./claudeai');
 
 const REGISTRY = {
   anthropic: AnthropicProvider,
   openai:    OpenAIProvider,
   gemini:    GeminiProvider,
+  claudeai:  ClaudeAIProvider,  // claude.ai 订阅套餐（用 sessionKey 认证）
 };
 
 /**

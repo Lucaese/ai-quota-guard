@@ -83,10 +83,15 @@ program
       {
         type: 'password',
         name: 'apiKey',
-        message: 'Enter your API key:',
+        message: (ans) => {
+          const prov = opts.provider || ans.provider;
+          return prov === 'claudeai'
+            ? '输入 claude.ai Session Key（浏览器 Cookie 中的 sessionKey 值，sk-ant-sid03-...）:'
+            : 'Enter your API key:';
+        },
         mask: '*',
         when: !opts.key,
-        validate: (v) => v.length > 0 || 'API key cannot be empty',
+        validate: (v) => v.length > 0 || 'Key 不能为空',
       },
       {
         type: 'list',
@@ -240,13 +245,24 @@ program
       const usedPct = quota.tokens.usedPercent || 0;
       const isOver = usedPct >= (m.stopThreshold || 90);
       const stateLabel = isOver ? chalk.red('⏸ PAUSED (threshold exceeded)') : chalk.green('● ACTIVE');
+      const isClaudeAI = m.provider === 'claudeai';
 
       console.log(`  Status   : ${stateLabel}`);
-      console.log(`  Tokens   : ${bar(usedPct)} ${usedPct.toFixed(1)}% used`);
-      console.log(`  Used     : ${fmtNum(quota.tokens.used)} / ${fmtNum(quota.tokens.limit)}`);
-      console.log(`  Remaining: ${fmtNum(quota.tokens.remaining)}`);
-      if (quota.tokens.resetAt) {
-        console.log(`  Resets   : ${dayjs(quota.tokens.resetAt).fromNow()} (${quota.tokens.resetAt})`);
+      console.log(`  Usage    : ${bar(usedPct)} ${usedPct.toFixed(1)}% used`);
+
+      if (isClaudeAI) {
+        // claude.ai 订阅以百分比计，无 token 数量
+        const meta = quota.meta || {};
+        console.log(`  Session  : ${meta.sessionUsedPercent != null ? meta.sessionUsedPercent + '%' : chalk.grey('—')}`);
+        console.log(`  Weekly   : ${meta.weeklyUsedPercent != null ? meta.weeklyUsedPercent + '%' : chalk.grey('—')}`);
+        if (meta.sessionResetAt) console.log(`  Session重置: ${meta.sessionResetAt}`);
+        if (meta.weeklyResetAt)  console.log(`  Weekly重置 : ${meta.weeklyResetAt}`);
+      } else {
+        console.log(`  Used     : ${fmtNum(quota.tokens.used)} / ${fmtNum(quota.tokens.limit)} tokens`);
+        console.log(`  Remaining: ${fmtNum(quota.tokens.remaining)} tokens`);
+        if (quota.tokens.resetAt) {
+          console.log(`  Resets   : ${dayjs(quota.tokens.resetAt).fromNow()} (${quota.tokens.resetAt})`);
+        }
       }
       console.log(`  Thresholds: stop at ${chalk.red(m.stopThreshold || 90)}% | resume at ${chalk.green(m.resumeThreshold || 20)}%`);
     }
