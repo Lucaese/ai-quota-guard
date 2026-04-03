@@ -1,40 +1,41 @@
 # AI Quota Guard
 
-Monitor AI model API quota usage and automatically pause/resume your agent's API calls based on configurable thresholds.
+监控 AI 模型 API 的 Token 使用额度，在额度不足时自动暂停 Agent 调用，额度恢复后自动重新激活。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## Features
+## 功能特性
 
-- **Real-time quota monitoring** — polls API usage from response headers
-- **Auto-pause** — stops agent calls when usage hits your stop threshold
-- **Auto-resume** — re-activates calls when quota resets below resume threshold
-- **Multi-provider** — supports Anthropic (Claude), OpenAI (GPT), and Google (Gemini)
-- **Per-model thresholds** — configure stop/resume % independently per model
-- **CLI + SDK** — use as a command-line tool or import as a library
-- **MCP Server** — native Claude Code integration via Model Context Protocol
-
----
-
-## Supported Providers
-
-| Provider | Key | Reset Window |
-|----------|-----|-------------|
-| Anthropic (Claude) | `anthropic` | Every **5 hours** |
-| OpenAI (GPT) | `openai` | Per-minute rate limits |
-| Google Gemini | `gemini` | Per-minute rate limits |
+- **实时额度监控** — 通过 API 响应头实时轮询 Token 使用量
+- **自动暂停** — 使用量超过阈值时自动停止 Agent 调用
+- **自动恢复** — 额度重置后自动重新激活 Agent
+- **多平台支持** — 支持 Anthropic（Claude）、OpenAI（GPT）、Google Gemini
+- **独立阈值配置** — 每个模型可单独设置暂停/恢复百分比
+- **CLI + SDK 双模式** — 命令行工具 或 代码库方式集成
+- **MCP Server** — 原生支持 Claude Code 的 MCP 协议集成
 
 ---
 
-## Installation
+## 支持的提供商
+
+| 提供商 | 标识符 | 额度重置周期 |
+|--------|--------|-------------|
+| Anthropic (Claude) | `anthropic` | 每 **5 小时** 重置一次 |
+| OpenAI (GPT) | `openai` | 每分钟重置（速率限制） |
+| Google Gemini | `gemini` | 每分钟重置（速率限制） |
+
+---
+
+## 安装
 
 ```bash
+# 从 GitHub 全局安装
 npm install -g github:Lucaese/ai-quota-guard
 ```
 
-Or install locally in your project:
+或在项目中本地安装：
 
 ```bash
 npm install github:Lucaese/ai-quota-guard
@@ -42,22 +43,22 @@ npm install github:Lucaese/ai-quota-guard
 
 ---
 
-## CLI Usage
+## CLI 命令说明
 
-### Quick Start
+### 快速开始
 
 ```bash
-# 1. Add a model to monitor
+# 第一步：添加要监控的模型
 quota-guard add
 
-# 2. Check current quota status
+# 第二步：查看当前额度状态
 quota-guard status
 
-# 3. Start watching (continuous monitoring)
+# 第三步：启动持续监控
 quota-guard watch
 ```
 
-The `aqg` alias is also available:
+也可以使用简写别名 `aqg`：
 
 ```bash
 aqg add
@@ -66,133 +67,164 @@ aqg watch
 
 ---
 
-### Commands
+### `quota-guard add` — 添加监控模型
 
-#### `quota-guard add` — Add a model
-
-Interactive wizard to configure a model:
+交互式向导，逐步引导完成配置：
 
 ```bash
 quota-guard add
+# 会依次提示选择：提供商 → 输入 API Key → 选择模型 → 设置阈值
 ```
 
-Or pass options directly:
+或通过参数直接配置（跳过交互）：
 
 ```bash
+# 配置 Claude，额度用到 90% 时暂停，重置后恢复
 quota-guard add \
-  --provider anthropic \
-  --key sk-ant-... \
-  --model claude-opus-4-5 \
-  --stop 90 \
-  --resume 20
+  --provider anthropic \          # 提供商：anthropic / openai / gemini
+  --key sk-ant-...  \             # 你的 API Key
+  --model claude-opus-4-5 \       # 模型名称
+  --stop 90 \                     # 使用量达到 90% 时停止调用
+  --resume 20                     # 使用量降回 20% 时恢复调用（即额度重置后）
 ```
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-p, --provider` | Provider name (`anthropic`, `openai`, `gemini`) | interactive |
-| `-k, --key` | API key | interactive |
-| `-m, --model` | Model name | interactive |
-| `--stop <pct>` | Pause when usage reaches this % | `90` |
-| `--resume <pct>` | Resume when usage drops to this % | `20` |
-| `--poll <seconds>` | Poll interval | `60` |
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `-p, --provider` | 提供商（`anthropic` / `openai` / `gemini`） | 交互选择 |
+| `-k, --key` | API Key | 交互输入 |
+| `-m, --model` | 模型名称 | 交互选择 |
+| `--stop <百分比>` | 使用量达到此 % 时暂停 | `90` |
+| `--resume <百分比>` | 使用量降到此 % 时恢复 | `20` |
+| `--poll <秒>` | 轮询间隔（秒） | `60` |
 
 ---
 
-#### `quota-guard status` — One-shot status check
-
-```bash
-quota-guard status
-
-# JSON output
-quota-guard status --json
-```
-
-Sample output:
-```
-anthropic:claude-opus-4-5
-  Status   : ● ACTIVE
-  Tokens   : ████████░░░░░░░░░░░░░░░░░░░░░░ 28.4% used
-  Used     : 284,000 / 1,000,000
-  Remaining: 716,000
-  Resets   : in 3 hours
-  Thresholds: stop at 90% | resume at 20%
-```
-
----
-
-#### `quota-guard watch` — Continuous monitoring
-
-```bash
-quota-guard watch
-
-# Override poll interval
-quota-guard watch --interval 30
-```
-
-The watcher runs indefinitely. When thresholds are crossed:
-- **PAUSED** — printed with timestamp when stop threshold is hit
-- **RESUMED** — printed with timestamp when quota recovers
-
-Press `Ctrl+C` to stop.
-
----
-
-#### `quota-guard list` — List configured models
+### `quota-guard list` — 查看已配置的模型
 
 ```bash
 quota-guard list
-# alias: quota-guard ls
+# 别名：quota-guard ls
+
+# 输出示例：
+# ╔═══════════════════════════╤═══════════╤═════════════════╤════════╤══════════╗
+# ║ ID                        │ Provider  │ Model           │ Stop % │ Resume % ║
+# ╟───────────────────────────┼───────────┼─────────────────┼────────┼──────────╢
+# ║ anthropic:claude-opus-4-5 │ anthropic │ claude-opus-4-5 │ 90%    │ 20%      ║
+# ╚═══════════════════════════╧═══════════╧═════════════════╧════════╧══════════╝
 ```
 
 ---
 
-#### `quota-guard remove <id>` — Remove a model
+### `quota-guard status` — 查看当前额度状态（单次）
+
+```bash
+quota-guard status
+# 立即探测所有模型的最新额度，输出详情
+
+# 以 JSON 格式输出（便于脚本处理）
+quota-guard status --json
+
+# 输出示例：
+# anthropic:claude-opus-4-5
+#   Status   : ● ACTIVE
+#   Tokens   : ████████░░░░░░░░░░░░░░░░░░░░░░ 28.4% used
+#   Used     : 284,000 / 1,000,000
+#   Remaining: 716,000
+#   Resets   : in 3 hours
+#   Thresholds: stop at 90% | resume at 20%
+```
+
+---
+
+### `quota-guard watch` — 持续监控（长期运行）
+
+```bash
+quota-guard watch
+# 启动后持续运行，每隔 60 秒探测一次额度
+# 达到 stop 阈值时打印 ⏸ PAUSED 提示
+# 额度恢复后打印 ▶ RESUMED 提示
+
+# 自定义轮询间隔（秒）
+quota-guard watch --interval 30   # 每 30 秒检查一次
+
+# 按 Ctrl+C 停止监控
+```
+
+---
+
+### `quota-guard remove <id>` — 删除模型配置
 
 ```bash
 quota-guard remove anthropic:claude-opus-4-5
-# alias: quota-guard rm anthropic:claude-opus-4-5
+# 别名：quota-guard rm anthropic:claude-opus-4-5
+# ID 格式：<提供商>:<模型名>，可通过 quota-guard list 查看
 ```
 
 ---
 
-#### `quota-guard providers` — Show supported providers
+### `quota-guard providers` — 查看支持的提供商和模型列表
 
 ```bash
 quota-guard providers
+
+# 输出示例：
+# Anthropic (Claude)  (anthropic)
+#   Reset: Anthropic resets token quota every 5 hours (300 minutes)
+#   Models:
+#     - claude-opus-4-5
+#     - claude-sonnet-4-5
+#     - claude-haiku-4-5
+#     ...
 ```
 
 ---
 
-#### `quota-guard set <key> <value>` — Update global settings
+### `quota-guard set <key> <value>` — 修改全局设置
 
 ```bash
-quota-guard set pollIntervalSeconds 30
-quota-guard set notifications true
+quota-guard set pollIntervalSeconds 30    # 将轮询间隔改为 30 秒
+quota-guard set notifications true        # 开启通知
 ```
 
 ---
 
-#### `quota-guard config` — Show full configuration
+### `quota-guard config` — 查看完整配置
 
 ```bash
 quota-guard config
+# 输出当前所有配置（API Key 自动脱敏显示为 ***）
+# 同时显示配置文件路径
 ```
-
-API keys are redacted in output.
 
 ---
 
-#### `quota-guard reset` — Clear all configuration
+### `quota-guard reset` — 清空所有配置
 
 ```bash
 quota-guard reset
+# 删除所有模型配置和全局设置，操作前会二次确认
 ```
 
 ---
 
-## SDK / Library Usage
+## 阈值工作原理
 
-Use `ai-quota-guard` programmatically inside your agent:
+```
+Token 使用量:  0%─────────[resumeThreshold 恢复阈值]──────[stopThreshold 暂停阈值]──100%
+                                      ↑                              ↑
+                               Agent 恢复调用                  Agent 停止调用
+```
+
+**以 Claude 为例（5 小时重置周期）：**
+
+- `stopThreshold: 90` — 当 Token 使用量达到 90% 时，守卫暂停 Agent 调用
+- `resumeThreshold: 20` — Claude 5 小时重置后，使用量回到 0% 附近（≤ 20%），自动恢复调用
+
+---
+
+## SDK 集成（在代码中使用）
+
+在 Agent 代码中引入，在每次 API 调用前检查是否允许：
 
 ```js
 const { QuotaGuard } = require('ai-quota-guard');
@@ -203,8 +235,8 @@ const guard = new QuotaGuard({
       provider: 'anthropic',
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: 'claude-opus-4-5',
-      stopThreshold: 90,   // pause when 90% of tokens used
-      resumeThreshold: 20, // resume when usage drops to 20% (quota reset)
+      stopThreshold: 90,   // 使用量达到 90% 时暂停
+      resumeThreshold: 20, // 使用量降回 20% 时恢复（额度重置后）
     },
     {
       provider: 'openai',
@@ -214,62 +246,66 @@ const guard = new QuotaGuard({
       resumeThreshold: 10,
     },
   ],
-  pollIntervalSeconds: 60,
+  pollIntervalSeconds: 60, // 每 60 秒轮询一次
 });
 
-// Listen for state changes
-guard.on('paused',  ({ id, usedPercent }) => {
-  console.log(`⏸ ${id} paused — ${usedPercent}% used`);
+// 监听状态变化
+guard.on('paused', ({ id, usedPercent }) => {
+  console.log(`⏸ ${id} 已暂停 — 当前使用量 ${usedPercent}%`);
 });
 
 guard.on('resumed', ({ id, usedPercent }) => {
-  console.log(`▶ ${id} resumed — ${usedPercent}% used`);
+  console.log(`▶ ${id} 已恢复 — 当前使用量 ${usedPercent}%`);
 });
 
 guard.on('error', ({ id, error }) => {
-  console.error(`Error probing ${id}: ${error}`);
+  console.error(`${id} 探测失败: ${error}`);
 });
 
 guard.start();
 
-// In your agent loop:
+// 在 Agent 调用模型前检查
 async function callModel(prompt) {
   if (!guard.isAllowed('anthropic', 'claude-opus-4-5')) {
-    console.log('Model paused – waiting for quota to restore…');
-    return null;
+    console.log('模型已暂停，等待额度恢复…');
+    return null; // 或排队等待
   }
-  // Your normal API call here
+  // 正常调用 API
+  const response = await anthropic.messages.create({ ... });
+  return response;
 }
 ```
 
-### Events
+### 事件列表
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `started` | `{ models }` | Monitor started |
-| `initialized` | `{ id, state, quota }` | First probe complete |
-| `quota` | `{ id, quota, state }` | Every probe cycle |
-| `paused` | `{ id, provider, model, usedPercent, stopThreshold, quota }` | Stop threshold crossed |
-| `resumed` | `{ id, provider, model, usedPercent, resumeThreshold, quota }` | Resume threshold crossed |
-| `error` | `{ id, error }` | Probe failed |
-| `stopped` | — | Monitor stopped |
+| 事件 | 数据 | 说明 |
+|------|------|------|
+| `started` | `{ models }` | 监控已启动 |
+| `initialized` | `{ id, state, quota }` | 首次探测完成 |
+| `quota` | `{ id, quota, state }` | 每次轮询数据更新 |
+| `paused` | `{ id, provider, model, usedPercent, stopThreshold, quota }` | 达到暂停阈值 |
+| `resumed` | `{ id, provider, model, usedPercent, resumeThreshold, quota }` | 额度恢复，重新激活 |
+| `error` | `{ id, error }` | 探测失败 |
+| `stopped` | — | 监控已停止 |
 
-### Methods
+### 方法列表
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `start()` | `void` | Begin polling |
-| `stop()` | `void` | Stop all polling |
-| `isAllowed(provider, model)` | `boolean` | Check if model calls are allowed |
-| `getSnapshot()` | `Array` | Current state of all models |
-| `getHistory(id)` | `Array` | Last 100 quota snapshots for a model |
-| `forceProbe(provider, model)` | `Promise<quota>` | Force immediate re-probe |
+| 方法 | 返回值 | 说明 |
+|------|--------|------|
+| `start()` | `void` | 启动轮询监控 |
+| `stop()` | `void` | 停止所有轮询 |
+| `isAllowed(provider, model)` | `boolean` | 检查该模型当前是否允许调用 |
+| `getSnapshot()` | `Array` | 获取所有模型当前状态快照 |
+| `getHistory(id)` | `Array` | 获取指定模型最近 100 次探测记录 |
+| `forceProbe(provider, model)` | `Promise<quota>` | 立即强制重新探测（跳过缓存） |
 
 ---
 
-## MCP Server (Claude Code Integration)
+## MCP Server（Claude Code 集成）
 
-Use as an MCP server so Claude Code can check quota before each call:
+将 `quota-guard` 作为 MCP Server，让 Claude Code 在每次调用前自动检查额度：
+
+在 Claude Code 配置文件中添加：
 
 ```json
 {
@@ -281,27 +317,22 @@ Use as an MCP server so Claude Code can check quota before each call:
 }
 ```
 
-Available MCP tools: `quota_status`, `quota_is_allowed`, `quota_add_model`, `quota_list_models`, `quota_remove_model`, `quota_force_probe`.
+可用的 MCP 工具：
+
+| 工具名 | 说明 |
+|--------|------|
+| `quota_status` | 查看所有模型当前额度状态 |
+| `quota_is_allowed` | 检查指定模型是否允许调用 |
+| `quota_add_model` | 添加/更新监控模型 |
+| `quota_list_models` | 列出所有已配置模型 |
+| `quota_remove_model` | 删除模型配置 |
+| `quota_force_probe` | 强制重新探测指定模型 |
 
 ---
 
-## How Thresholds Work
+## 环境变量
 
-```
-Usage %:  0%─────────────[resumeThreshold]──────────[stopThreshold]──100%
-                                ↑                           ↑
-                          Agent RESUMES                Agent PAUSES
-```
-
-**Example with Claude (5h reset window):**
-- `stopThreshold: 90` — when you've used 90% of your token allowance, the guard pauses calls
-- `resumeThreshold: 20` — after Claude's 5-hour window resets, usage drops back near 0%, which is ≤ 20%, so calls resume automatically
-
----
-
-## Environment Variables
-
-You can store API keys in a `.env` file (loaded automatically):
+在项目根目录创建 `.env` 文件，API Key 会自动加载：
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
@@ -311,11 +342,12 @@ GEMINI_API_KEY=AIza...
 
 ---
 
-## Configuration File Location
+## 配置文件位置
 
-Settings are stored in:
-- **macOS/Linux**: `~/.config/ai-quota-guard/config.json`
-- **Windows**: `%APPDATA%\ai-quota-guard\config.json`
+| 系统 | 路径 |
+|------|------|
+| macOS / Linux | `~/.config/ai-quota-guard/config.json` |
+| Windows | `%APPDATA%\ai-quota-guard\config.json` |
 
 ---
 
