@@ -40,6 +40,16 @@ function bar(usedPct, width = 30) {
   return color('█'.repeat(filled)) + chalk.grey('░'.repeat(empty));
 }
 
+// 格式化重置时间：若已是人可读字符串（如 "in 4 hr"）直接显示，否则用 dayjs
+function fmtResetAt(resetAt) {
+  if (!resetAt) return '';
+  const d = dayjs(resetAt);
+  if (!d.isValid() || typeof resetAt === 'string' && /^(in |Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(resetAt)) {
+    return resetAt;
+  }
+  return d.fromNow();
+}
+
 function fmtNum(n) {
   if (!n && n !== 0) return chalk.grey('—');
   return n.toLocaleString();
@@ -261,7 +271,7 @@ program
         console.log(`  Used     : ${fmtNum(quota.tokens.used)} / ${fmtNum(quota.tokens.limit)} tokens`);
         console.log(`  Remaining: ${fmtNum(quota.tokens.remaining)} tokens`);
         if (quota.tokens.resetAt) {
-          console.log(`  Resets   : ${dayjs(quota.tokens.resetAt).fromNow()} (${quota.tokens.resetAt})`);
+          console.log(`  Resets   : ${fmtResetAt(quota.tokens.resetAt)}`);
         }
       }
       console.log(`  Thresholds: stop at ${chalk.red(m.stopThreshold || 90)}% | resume at ${chalk.green(m.resumeThreshold || 20)}%`);
@@ -407,7 +417,7 @@ function printQuotaLine(id, quota, state) {
   const prefix = state === STATE.PAUSED ? chalk.red('⏸') : chalk.green('▶');
   const used = fmtNum(quota.tokens.used);
   const total = fmtNum(quota.tokens.limit);
-  const reset = quota.tokens.resetAt ? chalk.grey(`resets ${dayjs(quota.tokens.resetAt).fromNow()}`) : '';
+  const reset = quota.tokens.resetAt ? chalk.grey(`resets ${fmtResetAt(quota.tokens.resetAt)}`) : '';
   process.stdout.write(
     `\r${chalk.grey(ts())} ${prefix} ${chalk.cyan(id.padEnd(40))} ${bar(usedPct, 20)} ${usedPct.toFixed(1).padStart(5)}%  ${used}/${total}  ${reset}          `
   );
