@@ -49,13 +49,64 @@ process.stdin.on('data', (chunk) => {
 
 process.stdin.on('end', () => {
   log('stdin closed, bytesRead=' + bytesRead + ' chunks=' + chunks.length);
-  // 不在这里 exit——等 sendResponse 写完 stdout 后再退出
-  if (chunks.length > 0) processBuffer();
+  if (chunks.length > 0) {
+    processBuffer();
+  } else if (bytesRead === 0) {
+    // sendNativeMessage 没有传入数据（MV3 Service Worker 生命周期问题）
+    // 回退方案：直接读取 chrome.storage.local 的 LevelDB 日志文件
+    log('stdin empty, falling back to LevelDB read');
+    const data = readFromChromeStorage();
+    if (data) {
+      log('LevelDB fallback: session=' + data.sessionUsedPercent + '% weekly=' + data.weeklyUsedPercent + '%');
+      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      sendResponse({ ok: true, file: DATA_FILE, source: 'leveldb-fallback' });
+    } else {
+      log('LevelDB fallback: no data found');
+      sendResponse({ ok: false, error: 'no data in LevelDB' });
+    }
+  }
 });
 
 process.stdin.on('error', (err) => {
   log('stdin error: ' + err.message);
 });
+
+// ── LevelDB 回退读取 ──────────────────────────────────────────────────────────
+// 当 Chrome 未通过 stdin 发送数据时，直接解析 chrome.storage.local 文件
+function readFromChromeStorage() {
+  const EXT_ID = 'oadmkoinpcgiipcimlecbgagaklmhhoh';
+  const ldbDir = path.join(
+    os.homedir(),
+    'Library/Application Support/Google/Chrome/Profile 1/Local Extension Settings',
+    EXT_ID
+  );
+  // LevelDB 日志文件包含最近写入的记录
+  const logFiles = fs.readdirSync(ldbDir).filter(f => f.endsWith('.log'));
+  let lastEntry = null;
+
+  for (const lf of logFiles) {
+    try {
+      const buf = fs.readFileSync(path.join(ldbDir, lf));
+      // Use latin1 to safely decode binary LevelDB content as string
+      const text = buf.toString('latin1');
+      let idx = 0;
+      while (true) {
+        const i = text.indexOf('claudeaiUsage', idx);
+        if (i < 0) break;
+        const j = text.indexOf('{', i);
+        const k = text.indexOf('}', j);
+        if (j >= 0 && k >= 0) {
+          try {
+            const candidate = JSON.parse(text.slice(j, k + 1));
+            if (candidate.fetchedAt) lastEntry = candidate;
+          } catch (_) {}
+        }
+        idx = i + 1;
+      }
+    } catch (_) {}
+  }
+  return lastEntry;
+}
 
 function processBuffer() {
   const buf = Buffer.concat(chunks);

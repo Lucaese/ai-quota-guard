@@ -81,25 +81,32 @@ async function handleUsageData(data) {
 }
 
 // ── Native Messaging ──────────────────────────────────────────────────────────
+// 使用 connectNative（持久端口）而非 sendNativeMessage，
+// 避免 MV3 Service Worker 在 Chrome 写入 stdin 前被终止导致消息丢失。
 function sendToNativeHost(payload) {
   try {
-    chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
+    const port = chrome.runtime.connectNative(NATIVE_HOST);
+
+    port.onMessage.addListener((response) => {
+      port.disconnect();
+      chrome.storage.local.set({
+        nativeHostOk: { response, at: new Date().toISOString() }
+      });
+    });
+
+    port.onDisconnect.addListener(() => {
       if (chrome.runtime.lastError) {
         const errMsg = chrome.runtime.lastError.message;
-        console.warn('[quota-guard] native host:', errMsg);
-        // 将错误保存到 storage 以便外部诊断
+        console.warn('[quota-guard] native host disconnect:', errMsg);
         chrome.storage.local.set({
           nativeHostError: { error: errMsg, at: new Date().toISOString() }
         });
-      } else {
-        console.log('[quota-guard] synced to file:', response);
-        chrome.storage.local.set({
-          nativeHostOk: { response, at: new Date().toISOString() }
-        });
       }
     });
+
+    port.postMessage(payload);
   } catch (err) {
-    console.warn('[quota-guard] sendNativeMessage failed:', err);
+    console.warn('[quota-guard] connectNative failed:', err);
     chrome.storage.local.set({
       nativeHostError: { error: String(err), at: new Date().toISOString() }
     });
