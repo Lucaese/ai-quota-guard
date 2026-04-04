@@ -9,10 +9,17 @@ set -e
 
 HOST_NAME="com.ai_quota_guard.bridge"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOST_PATH="$SCRIPT_DIR/host.js"
 
-# 确保 host.js 可执行
-chmod +x "$HOST_PATH"
+# macOS Sequoia 对 ~/Documents/ 内的文件执行有权限限制。
+# 将 native host 安装到不受限制的 ~/.config/ 目录。
+INSTALL_DIR="$HOME/.config/ai-quota-guard/native-host"
+mkdir -p "$INSTALL_DIR"
+cp "$SCRIPT_DIR/host.js"    "$INSTALL_DIR/host.js"
+cp "$SCRIPT_DIR/run-host.sh" "$INSTALL_DIR/run-host.sh"
+chmod +x "$INSTALL_DIR/host.js"
+chmod +x "$INSTALL_DIR/run-host.sh"
+HOST_PATH="$INSTALL_DIR/run-host.sh"
+echo "✓ Native host 已复制到: $INSTALL_DIR"
 
 # 根据浏览器选择 manifest 目录
 BROWSER="${1:-chrome}"
