@@ -15,9 +15,52 @@ const dayjs = require('dayjs');
 const relativeTime = require('dayjs/plugin/relativeTime');
 dayjs.extend(relativeTime);
 
+const { execSync, spawnSync } = require('child_process');
+
 const { QuotaMonitor, STATE } = require('../src/monitor');
 const { createProvider, getSupportedProviders } = require('../src/providers');
 const ConfigManager = require('../src/config');
+
+// ─── Claude Code process control ─────────────────────────────────────────────
+
+function findClaudeCodePids() {
+  try {
+    // Match claude CLI process and any node process running claude-code
+    const out = execSync('pgrep -f "claude" 2>/dev/null || true', { encoding: 'utf-8' });
+    return out.trim().split('\n')
+      .map((s) => parseInt(s, 10))
+      .filter((n) => !isNaN(n) && n !== process.pid);
+  } catch (_) {
+    return [];
+  }
+}
+
+function stopClaudeWindows() {
+  const pids = findClaudeCodePids();
+  if (pids.length === 0) return 0;
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGSTOP'); } catch (_) {}
+  }
+  return pids.length;
+}
+
+function resumeClaudeWindows() {
+  const pids = findClaudeCodePids();
+  if (pids.length === 0) return 0;
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGCONT'); } catch (_) {}
+  }
+  return pids.length;
+}
+
+function notify(title, message) {
+  try {
+    spawnSync('osascript', [
+      '-e',
+      `display notification "${message}" with title "${title}" sound name "Basso"`,
+    ]);
+  } catch (_) {}
+}
 
 const pkg = require('../package.json');
 
@@ -327,6 +370,13 @@ program
         `\n${chalk.grey(ts())} ${chalk.red.bold('⏸ PAUSED')} ${chalk.cyan(id)} – usage ${chalk.red(usedPercent + '%')} ≥ stop threshold ${stopThreshold}%`
       );
       console.log(chalk.yellow('  ⚡ Agent calls to this model should be halted.\n'));
+      const stopped = stopClaudeWindows();
+      if (stopped > 0) {
+        console.log(chalk.red(`  ⏸ SIGSTOP sent to ${stopped} Claude Code process(es). They will resume when quota recovers.\n`));
+        notify('AI Quota Guard – Paused', `Usage ${usedPercent}% ≥ ${stopThreshold}%. ${stopped} Claude window(s) paused.`);
+      } else {
+        notify('AI Quota Guard – Paused', `Usage ${usedPercent}% ≥ ${stopThreshold}%. No Claude windows found.`);
+      }
     });
 
     monitor.on('resumed', ({ id, usedPercent, resumeThreshold }) => {
@@ -334,6 +384,13 @@ program
         `\n${chalk.grey(ts())} ${chalk.green.bold('▶ RESUMED')} ${chalk.cyan(id)} – usage ${chalk.green(usedPercent + '%')} ≤ resume threshold ${resumeThreshold}%`
       );
       console.log(chalk.green('  ✓ Agent calls to this model can proceed.\n'));
+      const resumed = resumeClaudeWindows();
+      if (resumed > 0) {
+        console.log(chalk.green(`  ▶ SIGCONT sent to ${resumed} Claude Code process(es).\n`));
+        notify('AI Quota Guard – Resumed', `Usage ${usedPercent}% ≤ ${resumeThreshold}%. ${resumed} Claude window(s) resumed.`);
+      } else {
+        notify('AI Quota Guard – Resumed', `Usage ${usedPercent}% ≤ ${resumeThreshold}%. Quota recovered.`);
+      }
     });
 
     monitor.on('error', ({ id, error }) => {
